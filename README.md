@@ -1,1 +1,1 @@
-# ng-training-assignment--1
+// README.md - placeholder content

@@ -1,0 +1,25 @@
+{
+  "info": {
+    "name": "To-Do List API",
+    "_postman_id": "xxxx-xxxx-xxxx-xxxx",
+    "description": "API documentation for To-Do List Application",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get All Tasks",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/api/tasks",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "tasks"]
+        }
+      }
+    }
+    // ... Add other endpoints similarly
+  ]
+}

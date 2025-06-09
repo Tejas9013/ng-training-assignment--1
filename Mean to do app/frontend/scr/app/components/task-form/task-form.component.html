@@ -1,0 +1,67 @@
+<form [formGroup]="taskForm" (ngSubmit)="onSubmit()" class="slds-form slds-form_stacked">
+  <div class="slds-form-element">
+    <label class="slds-form-element__label">Title</label>
+    <div class="slds-form-element__control">
+      <input type="text" formControlName="title" class="slds-input" required />
+    </div>
+    <div *ngIf="taskForm.get('title')?.invalid && taskForm.get('title')?.touched" class="slds-text-color_error">
+      Title is required.
+    </div>
+  </div>
+
+  <div class="slds-form-element">
+    <label class="slds-form-element__label">Description</label>
+    <div class="slds-form-element__control">
+      <textarea formControlName="description" class="slds-textarea"></textarea>
+    </div>
+  </div>
+
+  <div class="slds-form-element">
+    <label class="slds-form-element__label">Status</label>
+    <div class="slds-form-element__control">
+      <select formControlName="status" class="slds-select">
+        <option value="pending">Pending</option>
+        <option value="completed">Completed</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="slds-form-element">
+    <label class="slds-form-element__label">Priority</label>
+    <div class="slds-form-element__control">
+      <select formControlName="priority" class="slds-select">
+        <option value="low">Low</option>
+        <option value="normal">Normal</option>
+        <option value="high">High</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="slds-form-element">
+    <label class="slds-form-element__label">Due Date</label>
+    <div class="slds-form-element__control">
+      <input type="date" formControlName="dueDate" class="slds-input" />
+    </div>
+  </div>
+
+  <div class="slds-form-element">
+    <label class="slds-form-element__label">Assigned To</label>
+    <div class="slds-form-element__control">
+      <input type="text" formControlName="assignedTo" class="slds-input" />
+    </div>
+  </div>
+
+  <div class="slds-form-element">
+    <label class="slds-form-element__label">Comments</label>
+    <div class="slds-form-element__control">
+      <textarea formControlName="comments" class="slds-textarea"></textarea>
+    </div>
+  </div>
+
+  <div class="slds-m-top_medium">
+    <button class="slds-button slds-button_brand" type="submit">
+      {{ task ? 'Update Task' : 'Add Task' }}
+    </button>
+    <button *ngIf="task" class="slds-button slds-button_neutral" type="button" (click)="onCancel()">Cancel</button>
+  </div>
+</form>

@@ -1,0 +1,38 @@
+{
+  "name": "todo-backend",
+  "version": "1.0.0",
+  "description": "MEAN Stack To-Do List Backend API",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "test": "mocha test/**/*.js --timeout 10000 --exit",
+    "test:coverage": "nyc --reporter=text --reporter=html mocha test/**/*.js --timeout 10000 --exit"
+  },
+  "keywords": [
+    "nodejs",
+    "express",
+    "mongodb",
+    "rest-api",
+    "todo"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^8.0.3",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "express-validator": "^7.0.1",
+    "dotenv": "^16.3.1",
+    "compression": "^1.7.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "mocha": "^10.2.0",
+    "chai": "^4.3.10",
+    "chai-http": "^4.4.0",
+    "nyc": "^15.1.0",
+    "mongodb-memory-server": "^9.1.3"
+  }
+}

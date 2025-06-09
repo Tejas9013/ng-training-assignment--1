@@ -1,0 +1,637 @@
+# Backend Test Suite with Mocha and Chai
+
+## 1. Test Setup (tests/setup.test.js)
+
+```javascript
+const chai = require('chai');
+const chaiHttp = require('chai-http');
+const mongoose = require('mongoose');
+
+// Configure chai
+chai.use(chaiHttp);
+chai.should();
+
+global.expect = chai.expect;
+global.assert = chai.assert;
+
+// Test database configuration
+const TEST_DB_URI = process.env.TEST_MONGODB_URI || 'mongodb://localhost:27017/todo-app-test';
+
+// Setup test database connection
+before(async function() {
+  this.timeout(10000); // Increase timeout for database connection
+  
+  try {
+    // Disconnect if already connected
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+    }
+    
+    // Connect to test database
+    await mongoose.connect(TEST_DB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
+    
+    console.log('✅ Test database connected');
+  } catch (error) {
+    console.error('❌ Test database connection failed:', error);
+    throw error;
+  }
+});
+
+// Clean up after all tests
+after(async function() {
+  this.timeout(10000);
+  
+  try {
+    // Drop test database
+    await mongoose.connection.db.dropDatabase();
+    console.log('🗑️ Test database dropped');
+    
+    // Close connection
+    await mongoose.connection.close();
+    console.log('📴 Test database connection closed');
+  } catch (error) {
+    console.error('❌ Test cleanup failed:', error);
+  }
+});
+
+// Helper function to clean collections before each test
+global.cleanDatabase = async () => {
+  const collections = mongoose.connection.collections;
+  
+  for (const key in collections) {
+    const collection = collections[key];
+    await collection.deleteMany({});
+  }
+};
+```
+
+## 2. Task API Tests (tests/task.test.js)
+
+```javascript
+const chai = require('chai');
+const chaiHttp = require('chai-http');
+const app = require('../app');
+const Task = require('../models/taskModel');
+
+chai.use(chaiHttp);
+const { expect } = chai;
+
+describe('Task API', () => {
+  beforeEach(async () => {
+    // Clean database before each test
+    await cleanDatabase();
+  });
+
+  describe('POST /api/task', () => {
+    it('should create a new task with valid data', async () => {
+      const taskData = {
+        title: 'Test Task',
+        description: 'This is a test task',
+        status: 'pending',
+        priority: 'high',
+        assignedTo: 'John Doe',
+        comments: 'Initial task creation'
+      };
+
+      const res = await chai
+        .request(app)
+        .post('/api/task')
+        .send(taskData);
+
+      expect(res).to.have.status(201);
+      expect(res.body).to.have.property('success', true);
+      expect(res.body).to.have.property('message', 'Task created successfully');
+      expect(res.body.data).to.have.property('title', taskData.title);
+      expect(res.body.data).to.have.property('description', taskData.description);
+      expect(res.body.data).to.have.property('status', taskData.status);
+      expect(res.body.data).to.have.property('priority', taskData.priority);
+      expect(res.body.data).to.have.property('assignedTo', taskData.assignedTo);
+      expect(res.body.data).to.have.property('comments', taskData.comments);
+      expect(res.body.data).to.have.property('_id');
+      expect(res.body.data).to.have.property('createdAt');
+      expect(res.body.data).to.have.property('updatedAt');
+    });
+
+    it('should fail to create task without required title', async () => {
+      const taskData = {
+        description: 'Task without title'
+      };
+
+      const res = await chai
+        .request(app)
+        .post('/api/task')
+        .send(taskData);
+
+      expect(res).to.have.status(400);
+      expect(res.body).to.have.property('success', false);
+      expect(res.body).to.have.property('message', 'Validation failed');
+    });
+
+    it('should fail to create task with invalid status', async () => {
+      const taskData = {
+        title: 'Test Task',
+        status: 'invalid-status'
+      };
+
+      const res = await chai
+        .request(app)
+        .post('/api/task')
+        .send(taskData);
+
+      expect(res).to.have.status(400);
+      expect(res.body).to.have.property('success', false);
+    });
+
+    it('should fail to create task with invalid priority', async () => {
+      const taskData = {
+        title: 'Test Task',
+        priority: 'invalid-priority'
+      };
+
+      const res = await chai
+        .request(app)
+        .post('/api/task')
+        .send(taskData);
+
+      expect(res).to.have.status(400);
+      expect(res.body).to.have.property('success', false);
+    });
+
+    it('should create task with default values when optional fields are omitted', async () => {
+      const taskData = {
+        title: 'Minimal Task'
+      };
+
+      const res = await chai
+        .request(app)
+        .post('/api/task')
+        .send(taskData);
+
+      expect(res).to.have.status(201);
+      expect(res.body.data).to.have.property('status', 'pending');
+      expect(res.body.data).to.have.property('priority', 'normal');
+    });
+  });
+
+  describe('GET /api/tasks', () => {
+    beforeEach(async () => {
+      // Create test tasks
+      const testTasks = [
+        {
+          title: 'Task 1',
+          description: 'First task',
+          status: 'pending',
+          priority: 'high',
+          assignedTo: 'User 1'
+        },
+        {
+          title: 'Task 2',
+          description: 'Second task',
+          status: 'completed',
+          priority: 'low',
+          assignedTo: 'User 2'
+        },
+        {
+          title: 'Task 3',
+          description: 'Third task',
+          status: 'pending',
+          priority: 'normal',
+          assignedTo: 'User 3'
+        }
+      ];
+
+      await Task.insertMany(testTasks);
+    });
+
+    it('should retrieve all tasks with default pagination', async () => {
+      const res = await chai
+        .request(app)
+        .get('/api/tasks');
+
+      expect(res).to.have.status(200);
+      expect(res.body).to.have.property('success', true);
+      expect(res.body.data).to.have.property('tasks');
+      expect(res.body.data.tasks).to.be.an('array');
+      expect(res.body.data.tasks).to.have.lengthOf(3);
+      expect(res.body.data).to.have.property('pagination');
+      expect(res.body.data.pagination).to.have.property('totalTasks', 3);
+    });
+
+    it('should filter tasks by status', async () => {
+      const res = await chai
+        .request(app)
+        .get('/api/tasks?status=pending');
+
+      expect(res).to.have.status(200);
+      expect(res.body.data.tasks).to.have.lengthOf(2);
+      res.body.data.tasks.forEach(task => {
+        expect(task.status).to.equal('pending');
+      });
+    });
+
+    it('should filter tasks by priority', async () => {
+      const res = await chai
+        .request(app)
+        .get('/api/tasks?priority=high');
+
+      expect(res).to.have.status(200);
+      expect(res.body.data.tasks).to.have.lengthOf(1);
+      expect(res.body.data.tasks[0].priority).to.equal('high');
+    });
+
+    it('should search tasks by title and description', async () => {
+      const res = await chai
+        .request(app)
+        .get('/api/tasks?search=first');
+
+      expect(res).to.have.status(200);
+      expect(res.body.data.tasks).to.have.lengthOf(1);
+      expect(res.body.data.tasks[0].description).to.include('First');
+    });
+
+    it('should paginate results correctly', async () => {
+      const res = await chai
+        .request(app)
+        .get('/api/tasks?page=1&limit=2');
+
+      expect(res).to.have.status(200);
+      expect(res.body.data.tasks).to.have.lengthOf(2);
+      expect(res.body.data.pagination.currentPage).to.equal(1);
+      expect(res.body.data.pagination.totalPages).to.equal(2);
+    });
+  });
+
+  describe('GET /api/tasks/:id', () => {
+    let testTask;
+
+    beforeEach(async () => {
+      testTask = await Task.create({
+        title: 'Test Task',
+        description: 'Task for testing get by ID',
+        status: 'pending',
+        priority: 'normal'
+      });
+    });
+
+    it('should retrieve task by valid ID', async () => {
+      const res = await chai
+        .request(app)
+        .get(`/api/tasks/${testTask._id}`);
+
+      expect(res).to.have.status(200);
+      expect(res.body).to.have.property('success', true);
+      expect(res.body.data).to.have.property('_id', testTask._id.toString());
+      expect(res.body.data).to.have.property('title', testTask.title);
+    });
+
+    it('should return 404 for non-existent task', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId();
+      
+      const res = await chai
+        .request(app)
+        .get(`/api/tasks/${nonExistentId}`);
+
+      expect(res).to.have.status(404);
+      expect(res.body).to.have.property('success', false);
+      expect(res.body).to.have.property('message', 'Task not found');
+    });
+
+    it('should return 400 for invalid ID format', async () => {
+      const res = await chai
+        .request(app)
+        .get('/api/tasks/invalid-id');
+
+      expect(res).to.have.status(400);
+      expect(res.body).to.have.property('success', false);
+      expect(res.body).to.have.property('message', 'Invalid task ID format');
+    });
+  });
+
+  describe('PUT /api/task/:id', () => {
+    let testTask;
+
+    beforeEach(async () => {
+      testTask = await Task.create({
+        title: 'Original Task',
+        description: 'Original description',
+        status: 'pending',
+        priority: 'normal'
+      });
+    });
+
+    it('should update task with valid data', async () => {
+      const updateData = {
+        title: 'Updated Task',
+        description: 'Updated description',
+        status: 'completed',
+        priority: 'high'
+      };
+
+      const res = await chai
+        .request(app)
+        .put(`/api/task/${testTask._id}`)
+        .send(updateData);
+
+      expect(res).to.have.status(200);
+      expect(res.body).to.have.property('success', true);
+      expect(res.body).to.have.property('message', 'Task updated successfully');
+      expect(res.body.data).to.have.property('title', updateData.title);
+      expect(res.body.data).to.have.property('description', updateData.description);
+      expect(res.body.data).to.have.property('status', updateData.status);
+      expect(res.body.data).to.have.property('priority', updateData.priority);
+    });
+
+    it('should return 404 for non-existent task', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId();
+      
+      const res = await chai
+        .request(app)
+        .put(`/api/task/${nonExistentId}`)
+        .send({ title: 'Updated Task' });
+
+      expect(res).to.have.status(404);
+      expect(res.body).to.have.property('success', false);
+      expect(res.body).to.have.property('message', 'Task not found');
+    });
+
+    it('should validate updated data', async () => {
+      const res = await chai
+        .request(app)
+        .put(`/api/task/${testTask._id}`)
+        .send({ status: 'invalid-status' });
+
+      expect(res).to.have.status(400);
+      expect(res.body).to.have.property('success', false);
+    });
+  });
+
+  describe('DELETE /api/task/:id', () => {
+    let testTask;
+
+    beforeEach(async () => {
+      testTask = await Task.create({
+        title: 'Task to Delete',
+        description: 'This task will be deleted',
+        status: 'pending'
+      });
+    });
+
+    it('should delete task by valid ID', async () => {
+      const res = await chai
+        .request(app)
+        .delete(`/api/task/${testTask._id}`);
+
+      expect(res).to.have.status(200);
+      expect(res.body).to.have.property('success', true);
+      expect(res.body).to.have.property('message', 'Task deleted successfully');
+      expect(res.body.data).to.have.property('_id', testTask._id.toString());
+
+      // Verify task is actually deleted
+      const deletedTask = await Task.findById(testTask._id);
+      expect(deletedTask).to.be.null;
+    });
+
+    it('should return 404 for non-existent task', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId();
+      
+      const res = await chai
+        .request(app)
+        .delete(`/api/task/${nonExistentId}`);
+
+      expect(res).to.have.status(404);
+      expect(res.body).to.have.property('success', false);
+      expect(res.body).to.have.property('message', 'Task not found');
+    });
+  });
+
+  describe('GET /api/tasks/stats', () => {
+    beforeEach(async () => {
+      const testTasks = [
+        { title: 'Task 1', status: 'pending', priority: 'high' },
+        { title: 'Task 2', status: 'pending', priority: 'low' },
+        { title: 'Task 3', status: 'completed', priority: 'normal' },
+        { title: 'Task 4', status: 'completed', priority: 'high' }
+      ];
+
+      await Task.insertMany(testTasks);
+    });
+
+    it('should return task statistics', async () => {
+      const res = await chai
+        .request(app)
+        .get('/api/tasks/stats');
+
+      expect(res).to.have.status(200);
+      expect(res.body).to.have.property('success', true);
+      expect(res.body.data).to.have.property('totalTasks', 4);
+      expect(res.body.data).to.have.property('statusBreakdown');
+      expect(res.body.data).to.have.property('priorityBreakdown');
+      expect(res.body.data.statusBreakdown).to.be.an('array');
+      expect(res.body.data.priorityBreakdown).to.be.an('array');
+    });
+  });
+});
+```
+
+## 3. Model Tests (tests/taskModel.test.js)
+
+```javascript
+const { expect } = require('chai');
+const Task = require('../models/taskModel');
+const mongoose = require('mongoose');
+
+describe('Task Model', () => {
+  beforeEach(async () => {
+    await cleanDatabase();
+  });
+
+  describe('Task Creation', () => {
+    it('should create a task with valid data', async () => {
+      const taskData = {
+        title: 'Test Task',
+        description: 'This is a test task',
+        status: 'pending',
+        priority: 'high',
+        assignedTo: 'John Doe',
+        comments: 'Test comments'
+      };
+
+      const task = new Task(taskData);
+      const savedTask = await task.save();
+
+      expect(savedTask._id).to.exist;
+      expect(savedTask.title).to.equal(taskData.title);
+      expect(savedTask.description).to.equal(taskData.description);
+      expect(savedTask.status).to.equal(taskData.status);
+      expect(savedTask.priority).to.equal(taskData.priority);
+      expect(savedTask.assignedTo).to.equal(taskData.assignedTo);
+      expect(savedTask.comments).to.equal(taskData.comments);
+      expect(savedTask.createdAt).to.exist;
+      expect(savedTask.updatedAt).to.exist;
+    });
+
+    it('should create task with default values', async () => {
+      const taskData = {
+        title: 'Minimal Task'
+      };
+
+      const task = new Task(taskData);
+      const savedTask = await task.save();
+
+      expect(savedTask.status).to.equal('pending');
+      expect(savedTask.priority).to.equal('normal');
+    });
+
+    it('should fail to create task without title', async () => {
+      const taskData = {
+        description: 'Task without title'
+      };
+
+      const task = new Task(taskData);
+      
+      try {
+        await task.save();
+        expect.fail('Should have thrown validation error');
+      } catch (error) {
+        expect(error.name).to.equal('ValidationError');
+        expect(error.errors.title).to.exist;
+      }
+    });
+
+    it('should validate status enum values', async () => {
+      const taskData = {
+        title: 'Test Task',
+        status: 'invalid-status'
+      };
+
+      const task = new Task(taskData);
+      
+      try {
+        await task.save();
+        expect.fail('Should have thrown validation error');
+      } catch (error) {
+        expect(error.name).to.equal('ValidationError');
+        expect(error.errors.status).to.exist;
+      }
+    });
+
+    it('should validate priority enum values', async () => {
+      const taskData = {
+        title: 'Test Task',
+        priority: 'invalid-priority'
+      };
+
+      const task = new Task(taskData);
+      
+      try {
+        await task.save();
+        expect.fail('Should have thrown validation error');
+      } catch (error) {
+        expect(error.name).to.equal('ValidationError');
+        expect(error.errors.priority).to.exist;
+      }
+    });
+  });
+
+  describe('Task Validation', () => {
+    it('should enforce maximum title length', async () => {
+      const taskData = {
+        title: 'a'.repeat(101) // 101 characters, exceeds 100 limit
+      };
+
+      const task = new Task(taskData);
+      
+      try {
+        await task.save();
+        expect.fail('Should have thrown validation error');
+      } catch (error) {
+        expect(error.name).to.equal('ValidationError');
+        expect(error.errors.title).to.exist;
+      }
+    });
+
+    it('should enforce maximum description length', async () => {
+      const taskData = {
+        title: 'Test Task',
+        description: 'a'.repeat(501) // 501 characters, exceeds 500 limit
+      };
+
+      const task = new Task(taskData);
+      
+      try {
+        await task.save();
+        expect.fail('Should have thrown validation error');
+      } catch (error) {
+        expect(error.name).to.equal('ValidationError');
+        expect(error.errors.description).to.exist;
+      }
+    });
+
+    it('should trim whitespace from text fields', async () => {
+      const taskData = {
+        title: '  Test Task  ',
+        description: '  Test Description  ',
+        assignedTo: '  John Doe  ',
+        comments: '  Test Comments  '
+      };
+
+      const task = new Task(taskData);
+      const savedTask = await task.save();
+
+      expect(savedTask.title).to.equal('Test Task');
+      expect(savedTask.description).to.equal('Test Description');
+      expect(savedTask.assignedTo).to.equal('John Doe');
+      expect(savedTask.comments).to.equal('Test Comments');
+    });
+  });
+
+  describe('Task Virtuals', () => {
+    it('should calculate age in days correctly', async () => {
+      const task = new Task({
+        title: 'Test Task'
+      });
+      
+      const savedTask = await task.save();
+      
+      expect(savedTask.ageInDays).to.be.a('number');
+      expect(savedTask.ageInDays).to.be.at.least(0);
+    });
+  });
+
+  describe('Task Updates', () => {
+    it('should update timestamps on modification', async () => {
+      const task = await Task.create({
+        title: 'Original Title'
+      });
+
+      const originalUpdatedAt = task.updatedAt;
+      
+      // Wait a moment to ensure timestamp difference
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
+      task.title = 'Updated Title';
+      const updatedTask = await task.save();
+
+      expect(updatedTask.updatedAt).to.be.greaterThan(originalUpdatedAt);
+    });
+  });
+});
+```
+
+## 4. Test Runner Script (package.json scripts)
+
+```json
+{
+  "scripts": {
+    "test": "NODE_ENV=test mocha --require ./tests/setup.test.js './tests/**/*.test.js' --exit --timeout 10000",
+    "test:watch": "npm run test -- --watch",
+    "test:coverage": "NODE_ENV=test nyc mocha --require ./tests/setup.test.js './tests/**/*.test.js' --exit --timeout 10000",
+    "test:unit": "NODE_ENV=test mocha --require ./tests/setup.test.js './tests/taskModel.test.js' --exit",
+    "test:integration": "NODE_ENV=test mocha --require ./tests/setup.test.js './tests/task.test.js' --exit",
+    "test:ci": "NODE_ENV=test npm run test:coverage && npm run lint"
+  }
+}
+```
